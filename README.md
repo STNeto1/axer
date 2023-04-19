@@ -9,7 +9,8 @@
     - ws content
 
 
-- WIP (?)
+- Todo (?)
+  - Add auth keys middleware
   - Queues?
     - Scylla
     - PG
