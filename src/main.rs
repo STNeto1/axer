@@ -38,13 +38,18 @@ async fn main() {
     let thread_rx = tx.clone();
     tokio::spawn(async move {
         loop {
-            match thread_rx.send(WsMessage {
+            // If there are no subscribers, we don't need to send anything.
+            if thread_rx.receiver_count() == 0 {
+                tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                continue;
+            }
+
+            if let Err(e) = thread_rx.send(WsMessage {
                 channel: "channel".to_string(),
                 topic: "topic".to_string(),
                 value: serde_json::Value::Bool(true),
             }) {
-                Ok(_) => tracing::debug!("sent message"),
-                Err(e) => tracing::debug!("could not send message: {}", e),
+                tracing::debug!("could not send message: {}", e);
             }
 
             tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
