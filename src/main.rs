@@ -35,6 +35,22 @@ async fn main() {
 
     let (tx, _rx) = broadcast::channel::<WsMessage>(100);
 
+    let thread_rx = tx.clone();
+    tokio::spawn(async move {
+        loop {
+            match thread_rx.send(WsMessage {
+                channel: "channel".to_string(),
+                topic: "topic".to_string(),
+                value: serde_json::Value::Bool(true),
+            }) {
+                Ok(_) => tracing::debug!("sent message"),
+                Err(e) => tracing::debug!("could not send message: {}", e),
+            }
+
+            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        }
+    });
+
     let app_state = Arc::new(AppState { tx });
     let app = Router::new()
         .route("/ws/:channel/:topic", routing::get(websocket_handler))
