@@ -3,8 +3,9 @@ use axum::{
         ws::{Message, WebSocket},
         Path, State, WebSocketUpgrade,
     },
+    http::StatusCode,
     response::IntoResponse,
-    routing, Router,
+    routing, Json, Router,
 };
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -35,29 +36,30 @@ async fn main() {
 
     let (tx, _rx) = broadcast::channel::<WsMessage>(100);
 
-    let thread_rx = tx.clone();
-    tokio::spawn(async move {
-        loop {
-            // If there are no subscribers, we don't need to send anything.
-            if thread_rx.receiver_count() == 0 {
-                tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-                continue;
-            }
+    // let thread_rx = tx.clone();
+    // tokio::spawn(async move {
+    //     loop {
+    //         // If there are no subscribers, we don't need to send anything.
+    //         if thread_rx.receiver_count() == 0 {
+    //             tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+    //             continue;
+    //         }
 
-            if let Err(e) = thread_rx.send(WsMessage {
-                channel: "channel".to_string(),
-                topic: "topic".to_string(),
-                value: serde_json::Value::Bool(true),
-            }) {
-                tracing::debug!("could not send message: {}", e);
-            }
+    //         if let Err(e) = thread_rx.send(WsMessage {
+    //             channel: "channel".to_string(),
+    //             topic: "topic".to_string(),
+    //             value: serde_json::Value::Bool(true),
+    //         }) {
+    //             tracing::debug!("could not send message: {}", e);
+    //         }
 
-            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-        }
-    });
+    //         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+    //     }
+    // });
 
     let app_state = Arc::new(AppState { tx });
     let app = Router::new()
+        .route("/send", routing::post(send_message_handler))
         .route("/ws/:channel/:topic", routing::get(websocket_handler))
         .with_state(app_state);
 
@@ -67,6 +69,20 @@ async fn main() {
         .serve(app.into_make_service())
         .await
         .unwrap();
+}
+
+async fn send_message_handler(
+    State(state): State<Arc<AppState>>,
+    Json(msg): Json<WsMessage>,
+) -> impl IntoResponse {
+    return match state.tx.send(msg.clone()) {
+        Ok(_) => (StatusCode::OK).into_response(),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            format!("Could not send message: {}", e.to_string()),
+        )
+            .into_response(),
+    };
 }
 
 async fn websocket_handler(

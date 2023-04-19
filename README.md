@@ -11,6 +11,7 @@
 
 - Todo (?)
   - Add auth keys middleware
+  - Regex topic matching
   - Queues?
     - Scylla
     - PG
