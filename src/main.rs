@@ -8,13 +8,16 @@ use axum::{
     routing, Json, Router,
 };
 use futures::{SinkExt, StreamExt};
+use logger::MessageLogger;
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, sync::Arc};
-use tokio::sync::broadcast;
+use tokio::sync::broadcast::{self, Receiver};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+mod logger;
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
-struct WsMessage {
+pub struct WsMessage {
     channel: String,
     topic: String,
     value: serde_json::Value,
@@ -34,28 +37,12 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    let (tx, _rx) = broadcast::channel::<WsMessage>(100);
+    let (tx, rx) = broadcast::channel::<WsMessage>(100);
 
-    // let thread_rx = tx.clone();
-    // tokio::spawn(async move {
-    //     loop {
-    //         // If there are no subscribers, we don't need to send anything.
-    //         if thread_rx.receiver_count() == 0 {
-    //             tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-    //             continue;
-    //         }
-
-    //         if let Err(e) = thread_rx.send(WsMessage {
-    //             channel: "channel".to_string(),
-    //             topic: "topic".to_string(),
-    //             value: serde_json::Value::Bool(true),
-    //         }) {
-    //             tracing::debug!("could not send message: {}", e);
-    //         }
-
-    //         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-    //     }
-    // });
+    tokio::spawn(log_all_messages(
+        rx,
+        logger::console::ConsoleLogger::default(),
+    ));
 
     let app_state = Arc::new(AppState { tx });
     let app = Router::new()
@@ -141,4 +128,10 @@ async fn websocket(channel: String, topic: String, stream: WebSocket, state: Arc
     }
 
     tracing::debug!("websocket connection closed");
+}
+
+async fn log_all_messages(mut rx: Receiver<WsMessage>, logger: impl MessageLogger) {
+    while let Ok(msg) = rx.recv().await {
+        logger.log(&msg);
+    }
 }
