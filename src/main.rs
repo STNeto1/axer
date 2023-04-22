@@ -1,10 +1,11 @@
 use axum::{extract::State, http::StatusCode, response::IntoResponse, routing, Json, Router};
 use dotenv::dotenv;
-use logger::MessageLogger;
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, sync::Arc};
-use tokio::sync::broadcast::{self, Receiver};
+use tokio::sync::broadcast::{self};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+use crate::logger::log_all_messages;
 
 mod logger;
 mod ws;
@@ -70,13 +71,4 @@ async fn send_message_handler(
         )
             .into_response(),
     };
-}
-
-async fn log_all_messages(mut rx: Receiver<WsMessage>, logger: impl MessageLogger) {
-    while let Ok(msg) = rx.recv().await {
-        match logger.log(&msg).await {
-            Ok(_) => tracing::debug!("logged message"),
-            Err(e) => tracing::error!("could not log message: {}", e),
-        }
-    }
 }
