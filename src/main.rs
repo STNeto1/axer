@@ -42,7 +42,7 @@ async fn main() {
 
     let (tx, rx) = broadcast::channel::<WsMessage>(100);
 
-    let logger = logger::sql::SqlLogger::new().await;
+    let logger = logger::surreal::SurrealLogger::new().await;
     tokio::spawn(log_all_messages(rx, logger));
 
     let app_state = Arc::new(AppState { tx });
