@@ -1,14 +1,5 @@
-use axum::{
-    extract::{
-        ws::{Message, WebSocket},
-        Path, State, WebSocketUpgrade,
-    },
-    http::StatusCode,
-    response::IntoResponse,
-    routing, Json, Router,
-};
+use axum::{extract::State, http::StatusCode, response::IntoResponse, routing, Json, Router};
 use dotenv::dotenv;
-use futures::{SinkExt, StreamExt};
 use logger::MessageLogger;
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, sync::Arc};
@@ -16,6 +7,7 @@ use tokio::sync::broadcast::{self, Receiver};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod logger;
+mod ws;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct WsMessage {
@@ -24,7 +16,7 @@ pub struct WsMessage {
     value: serde_json::Value,
 }
 
-struct AppState {
+pub struct AppState {
     tx: broadcast::Sender<WsMessage>,
 }
 
@@ -42,13 +34,20 @@ async fn main() {
 
     let (tx, rx) = broadcast::channel::<WsMessage>(100);
 
-    let logger = logger::surreal::SurrealLogger::new().await;
+    let logger = logger::sql::SqlLogger::new().await;
     tokio::spawn(log_all_messages(rx, logger));
 
     let app_state = Arc::new(AppState { tx });
     let app = Router::new()
         .route("/send", routing::post(send_message_handler))
-        .route("/ws/:channel/:topic", routing::get(websocket_handler))
+        .route(
+            "/ws/dashboard",
+            routing::get(ws::dashboard::dashboard_websocket_handler),
+        )
+        .route(
+            "/ws/:channel/:topic",
+            routing::get(ws::channel::websocket_handler),
+        )
         .with_state(app_state);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
@@ -71,64 +70,6 @@ async fn send_message_handler(
         )
             .into_response(),
     };
-}
-
-async fn websocket_handler(
-    ws: WebSocketUpgrade,
-    Path((channel, topic)): Path<(String, String)>,
-    State(state): State<Arc<AppState>>,
-) -> impl IntoResponse {
-    ws.on_upgrade(|socket| websocket(channel, topic, socket, state))
-}
-
-async fn websocket(channel: String, topic: String, stream: WebSocket, state: Arc<AppState>) {
-    // By splitting, we can send and receive at the same time.
-    let (mut sender, mut receiver) = stream.split();
-
-    if let Err(_) = sender.send(Message::Ping("Ping".into())).await {
-        tracing::debug!("could not ping");
-        return;
-    }
-
-    // We subscribe *before* sending the "joined" message, so that we will also
-    // display it to our client.
-    let mut rx = state.tx.subscribe();
-
-    // Spawn the first task that will receive broadcast messages and send text
-    let mut send_task = tokio::spawn(async move {
-        while let Ok(msg) = rx.recv().await {
-            if msg.channel == channel && msg.topic == topic {
-                if sender
-                    .send(Message::Text(serde_json::to_string(&msg.value).unwrap()))
-                    .await
-                    .is_err()
-                {
-                    break;
-                }
-            }
-        }
-    });
-
-    let mut recv_task = tokio::spawn(async move {
-        while let Some(Ok(msg)) = receiver.next().await {
-            // End connection if client sends a close frame
-            if msg == Message::Close(None) {
-                break;
-            }
-        }
-    });
-
-    //wait for either task to finish and kill the other task
-    tokio::select! {
-        _ = (&mut send_task) => {
-            recv_task.abort();
-        },
-        _ = (&mut recv_task) => {
-            send_task.abort();
-        }
-    }
-
-    tracing::debug!("websocket connection closed");
 }
 
 async fn log_all_messages(mut rx: Receiver<WsMessage>, logger: impl MessageLogger) {
