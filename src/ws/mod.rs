@@ -35,7 +35,7 @@ pub mod dashboard {
         let mut send_task = tokio::spawn(async move {
             while let Ok(msg) = rx.recv().await {
                 if sender
-                    .send(Message::Text(serde_json::to_string(&msg.value).unwrap()))
+                    .send(Message::Text(serde_json::to_string(&msg).unwrap()))
                     .await
                     .is_err()
                 {

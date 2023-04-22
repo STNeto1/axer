@@ -3,6 +3,7 @@ use dotenv::dotenv;
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, sync::Arc};
 use tokio::sync::broadcast::{self};
+use tower_http::services::ServeDir;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::logger::log_all_messages;
@@ -49,7 +50,8 @@ async fn main() {
             "/ws/:channel/:topic",
             routing::get(ws::channel::websocket_handler),
         )
-        .with_state(app_state);
+        .with_state(app_state)
+        .nest_service("/", ServeDir::new("assets"));
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     tracing::debug!("listening on {}", addr);
