@@ -1,23 +1,17 @@
 use axum::async_trait;
-use sqlx::{postgres::PgPoolOptions, Postgres};
+use serde::Serialize;
 
 use crate::WsMessage;
 
 use super::MessageLogger;
 
 pub struct SqlLogger {
-    conn: sqlx::Pool<Postgres>,
+    conn: sqlx::Pool<sqlx::Postgres>,
 }
 
 impl SqlLogger {
-    pub async fn new() -> Self {
-        Self {
-            conn: PgPoolOptions::new()
-                .max_connections(5)
-                .connect(std::env::var("DATABASE_URL").unwrap().as_str())
-                .await
-                .expect("Could not connect to SQL"),
-        }
+    pub async fn new(conn: &sqlx::Pool<sqlx::Postgres>) -> Self {
+        Self { conn: conn.clone() }
     }
 }
 
@@ -39,4 +33,13 @@ impl MessageLogger for SqlLogger {
             Err(e) => Err(format!("Could not log message to SQL: {}", e.to_string())),
         };
     }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SqlRecord {
+    pub id: i32,
+    pub channel: String,
+    pub topic: String,
+    pub value: String,
+    pub created_at: String,
 }

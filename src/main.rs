@@ -1,6 +1,7 @@
 use axum::{extract::State, http::StatusCode, response::IntoResponse, routing, Json, Router};
 use dotenv::dotenv;
 use serde::{Deserialize, Serialize};
+use sqlx::postgres::PgPoolOptions;
 use std::{net::SocketAddr, sync::Arc};
 use tokio::sync::broadcast::{self};
 use tower_http::services::ServeDir;
@@ -20,6 +21,7 @@ pub struct WsMessage {
 
 pub struct AppState {
     tx: broadcast::Sender<WsMessage>,
+    pool: sqlx::Pool<sqlx::Postgres>,
 }
 
 #[tokio::main]
@@ -33,13 +35,18 @@ async fn main() {
         .init();
 
     dotenv().expect("Could not load .env file");
+    let pg_pool = PgPoolOptions::new()
+        .max_connections(5)
+        .connect(std::env::var("DATABASE_URL").unwrap().as_str())
+        .await
+        .expect("Could not connect to SQL");
 
     let (tx, rx) = broadcast::channel::<WsMessage>(100);
 
-    let logger = logger::sql::SqlLogger::new().await;
+    let logger = logger::sql::SqlLogger::new(&pg_pool).await;
     tokio::spawn(log_all_messages(rx, logger));
 
-    let app_state = Arc::new(AppState { tx });
+    let app_state = Arc::new(AppState { tx, pool: pg_pool });
     let app = Router::new()
         .route("/send", routing::post(send_message_handler))
         .route(

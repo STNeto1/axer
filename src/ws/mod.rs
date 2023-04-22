@@ -9,7 +9,7 @@ pub mod dashboard {
     use futures::{SinkExt, StreamExt};
     use std::sync::Arc;
 
-    use crate::AppState;
+    use crate::{logger::sql::SqlRecord, AppState};
 
     pub async fn dashboard_websocket_handler(
         ws: WebSocketUpgrade,
@@ -24,6 +24,32 @@ pub mod dashboard {
 
         if let Err(_) = sender.send(Message::Ping("Ping".into())).await {
             tracing::debug!("could not ping");
+            return;
+        }
+
+        let result = sqlx::query!(
+            r#"
+            SELECT * FROM messages ORDER BY id DESC;
+            "#
+        )
+        .fetch_all(&state.pool)
+        .await
+        .unwrap_or_else(|_| vec![])
+        .into_iter()
+        .map(|r| SqlRecord {
+            id: r.id,
+            channel: r.channel.unwrap_or_default(),
+            topic: r.topic.unwrap_or_default(),
+            value: r.value.unwrap_or_default(),
+            created_at: r.created_at.unwrap().to_string(),
+        })
+        .collect::<Vec<SqlRecord>>();
+
+        if let Err(_) = sender
+            .send(Message::Text(serde_json::to_string(&result).unwrap()))
+            .await
+        {
+            tracing::debug!("could not send messages");
             return;
         }
 

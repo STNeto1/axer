@@ -40,8 +40,20 @@
       };
 
       ws.onmessage = (event) => {
-        const message = JSON.parse(event.data);
-        setMessages((messages) => [...messages, message]);
+        const raw_data = JSON.parse(event.data);
+        if (Array.isArray(raw_data)) {
+          const parsed_data = raw_data.map((message) => {
+            return {
+              channel: message.channel,
+              topic: message.topic,
+              value: JSON.parse(message.value)
+            }
+          })
+
+          setMessages(parsed_data)
+        } else {
+          setMessages((prev) => [...prev, raw_data])
+        }
       };
 
       return html`

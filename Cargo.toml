@@ -11,7 +11,7 @@ dotenv = "0.15.0"
 futures = "0.3.28"
 serde = { version = "1.0.160", features = ["derive"] }
 serde_json = "1.0.96"
-sqlx = { version = "0.6.3", features = ["runtime-tokio-rustls", "postgres"] }
+sqlx = { version = "0.6.3", features = ["runtime-tokio-rustls", "postgres", "time"] }
 surrealdb = { version = "1.0.0-beta.9", features = ["protocol-http"] }
 tokio = { version = "1.27.0", features = ["full"] }
 tower = { version = "0.4.13", features = ["util"] }
