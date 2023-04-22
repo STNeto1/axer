@@ -1,7 +1,11 @@
+use axum::async_trait;
+
 use crate::WsMessage;
 
 pub mod console;
+pub mod sql;
 
+#[async_trait]
 pub trait MessageLogger {
-    fn log(&self, message: &WsMessage);
+    async fn log(&self, message: &WsMessage) -> Result<(), String>;
 }

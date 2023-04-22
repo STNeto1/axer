@@ -1,3 +1,5 @@
+use axum::async_trait;
+
 use crate::WsMessage;
 
 use super::MessageLogger;
@@ -5,8 +7,11 @@ use super::MessageLogger;
 #[derive(Debug, Default)]
 pub struct ConsoleLogger;
 
+#[async_trait]
 impl MessageLogger for ConsoleLogger {
-    fn log(&self, message: &WsMessage) {
+    async fn log(&self, message: &WsMessage) -> Result<(), String> {
         tracing::debug!("Received message: {:?}", message);
+
+        Ok(())
     }
 }

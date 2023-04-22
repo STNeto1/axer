@@ -7,6 +7,7 @@ use axum::{
     response::IntoResponse,
     routing, Json, Router,
 };
+use dotenv::dotenv;
 use futures::{SinkExt, StreamExt};
 use logger::MessageLogger;
 use serde::{Deserialize, Serialize};
@@ -37,12 +38,12 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
+    dotenv().expect("Could not load .env file");
+
     let (tx, rx) = broadcast::channel::<WsMessage>(100);
 
-    tokio::spawn(log_all_messages(
-        rx,
-        logger::console::ConsoleLogger::default(),
-    ));
+    let logger = logger::sql::SqlLogger::new().await;
+    tokio::spawn(log_all_messages(rx, logger));
 
     let app_state = Arc::new(AppState { tx });
     let app = Router::new()
@@ -132,6 +133,9 @@ async fn websocket(channel: String, topic: String, stream: WebSocket, state: Arc
 
 async fn log_all_messages(mut rx: Receiver<WsMessage>, logger: impl MessageLogger) {
     while let Ok(msg) = rx.recv().await {
-        logger.log(&msg);
+        match logger.log(&msg).await {
+            Ok(_) => tracing::debug!("logged message"),
+            Err(e) => tracing::error!("could not log message: {}", e),
+        }
     }
 }
